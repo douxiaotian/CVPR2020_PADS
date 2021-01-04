@@ -315,6 +315,7 @@ for epoch in range(opt.n_epochs):
 
 
 """======================================================="""
+"""
 ### CREATE A SUMMARY TEXT FILE
 summary_text = ''
 full_training_time = time.time()-full_training_start_time
@@ -327,3 +328,4 @@ for sub_logger in LOG.sub_loggers:
 
 with open(opt.save_path+'/training_summary.txt','w') as summary_file:
     summary_file.write(summary_text)
+"""
