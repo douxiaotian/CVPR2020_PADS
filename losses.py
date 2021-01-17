@@ -238,7 +238,9 @@ class WaTripletLoss(torch.nn.Module):
 
     def triplet_distance(self, anchor, positive, negative):
         wloss = SamplesLoss(loss = "sinkhorn", p = 2, blur=0.05, scaling = .99, backend = "online")
-        return torch.nn.functional.relu((wloss(anchor,positive)).pow(2).sum()-(wloss(anchor,negative)).pow(2).sum()+self.margin)
+        d1 = wloss(anchor,positive)
+        d2 = wloss(anchor,negative)
+        return torch.nn.functional.relu(d1.pow(2).sum()-d2.pow(2).sum()+self.margin)
 
     def forward(self, batch, labels, gt_labels=None):
         """
