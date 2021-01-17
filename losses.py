@@ -233,7 +233,7 @@ class WaTripletLoss(torch.nn.Module):
             triplets_per_batch: A batch allows for multitudes of triplets to use. This gives the number
                                 if triplets to sample from.
         """
-        super(TripletLoss, self).__init__()
+        super(WaTripletLoss, self).__init__()
         self.margin             = margin
         self.size_average       = size_average
         self.sampler            = Sampler(method=sampling_method)
