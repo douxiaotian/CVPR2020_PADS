@@ -14,6 +14,8 @@ from sklearn.preprocessing import normalize
 from PIL import Image
 
 import numpy as np
+from layers import SinkhornDistance
+
 
 
 
@@ -28,6 +30,9 @@ def loss_select(loss, opt, to_optim):
                         'beta_constant':opt.beta_constant}
         criterion    = MarginLoss(**loss_params)
         to_optim    += [{'params':criterion.parameters(), 'lr':opt.beta_lr, 'weight_decay':0}]
+    elif loss == 'watriplet':
+        loss_params  = {'margin':opt.margin, 'sampling_method':opt.sampling}
+        criterion    = WaTripletLoss(**loss_params)
     else:
         raise Exception('Loss {} not available!'.format(loss))
     return criterion, to_optim
@@ -218,7 +223,42 @@ class TripletLoss(torch.nn.Module):
         else:
             return torch.sum(loss)
 
+"""================================================================================================="""
+### Wasserstein Triplet Loss, finds triplets in Mini-batches.
+class WaTripletLoss(torch.nn.Module):
+    def __init__(self, margin=1, sampling_method='random', size_average=False):
+        """
+        Args:
+            margin:             Triplet Margin.
+            triplets_per_batch: A batch allows for multitudes of triplets to use. This gives the number
+                                if triplets to sample from.
+        """
+        super(TripletLoss, self).__init__()
+        self.margin             = margin
+        self.size_average       = size_average
+        self.sampler            = Sampler(method=sampling_method)
 
+    def triplet_distance(self, anchor, positive, negative):
+        wloss = SamplesLoss("sinkhorn", p = 2, blur=0.05, scaling = .99, backend = "online")
+        return torch.nn.functional.relu((wloss(anchor,positive)).pow(2).sum()-(wloss(anchor,negative)).pow(2).sum()+self.margin)
+
+    def forward(self, batch, labels, gt_labels=None):
+        """
+        Args:
+            batch:   torch.Tensor: Input of embeddings with size (BS x DIM)
+            labels:  nparray/list: For each element of the batch assigns a class [0,...,C-1], shape: (BS x 1)
+            sampled_triplets: Optional: Provided pre-sampled triplets
+        """
+        if gt_labels is not None:
+            sampled_triplets = self.sampler.give(batch, labels, gt_labels)
+        else:
+            sampled_triplets = self.sampler.give(batch, labels)
+        loss             = torch.stack([self.triplet_distance(batch[triplet[0],:],batch[triplet[1],:],batch[triplet[2],:]) for triplet in sampled_triplets])
+
+        if self.size_average:
+            return torch.mean(loss)
+        else:
+            return torch.sum(loss)
 
 
 
