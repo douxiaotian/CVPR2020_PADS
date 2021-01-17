@@ -15,9 +15,7 @@ from PIL import Image
 
 import numpy as np
 from layers import SinkhornDistance
-
-
-
+from geomloss import SamplesLoss
 
 """================================================================================================="""
 def loss_select(loss, opt, to_optim):
@@ -239,7 +237,7 @@ class WaTripletLoss(torch.nn.Module):
         self.sampler            = Sampler(method=sampling_method)
 
     def triplet_distance(self, anchor, positive, negative):
-        wloss = SamplesLoss("sinkhorn", p = 2, blur=0.05, scaling = .99, backend = "online")
+        wloss = SamplesLoss(loss = "sinkhorn", p = 2, blur=0.05, scaling = .99, backend = "online")
         return torch.nn.functional.relu((wloss(anchor,positive)).pow(2).sum()-(wloss(anchor,negative)).pow(2).sum()+self.margin)
 
     def forward(self, batch, labels, gt_labels=None):
