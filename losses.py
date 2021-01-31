@@ -401,7 +401,5 @@ class WassersteinLoss(torch.nn.Module):
             loss = torch.sum(pos_loss+neg_loss)
         else:
             loss = torch.sum(pos_loss+neg_loss)/pair_count
-
         # if self.nu: loss = loss + beta_regularisation_loss.type(torch.cuda.FloatTensor)
-
         return loss
