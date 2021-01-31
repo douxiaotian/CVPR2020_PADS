@@ -378,12 +378,11 @@ class WassersteinLoss(torch.nn.Module):
         d_ap, d_an = [],[]
         for triplet in sampled_triplets:
             train_triplet = {'Anchor': batch[triplet[0],:], 'Positive':batch[triplet[1],:], 'Negative':batch[triplet[2]]}
-             wloss = SamplesLoss(loss = "sinkhorn", p = 2, blur=0.05, scaling = .99, backend = "online")
-             d1 = wloss(train_triplet['Anchor'],train_triplet['Positive'])
-             d2 = wloss(train_triplet['Anchor'],train_triplet['Negative'])
+            wloss = SamplesLoss(loss = "sinkhorn", p = 2, blur=0.05, scaling = .99, backend = "online")
+            d1 = wloss(train_triplet['Anchor'],train_triplet['Positive'])
+            d2 = wloss(train_triplet['Anchor'],train_triplet['Negative'])
             pos_dist = (d1.pow(2).sum()+1e-8).pow(1/2)
             neg_dist = (d2.pow(2).sum()+1e-8).pow(1/2)
-
             d_ap.append(pos_dist)
             d_an.append(neg_dist)
         d_ap, d_an = torch.stack(d_ap), torch.stack(d_an)
