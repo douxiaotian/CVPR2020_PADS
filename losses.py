@@ -28,9 +28,15 @@ def loss_select(loss, opt, to_optim):
                         'beta_constant':opt.beta_constant}
         criterion    = MarginLoss(**loss_params)
         to_optim    += [{'params':criterion.parameters(), 'lr':opt.beta_lr, 'weight_decay':0}]
+    elif loss=='wasserstein':
+        loss_params  = {'margin':opt.margin, 'nu': opt.nu, 'beta':opt.beta,
+                        'n_classes':opt.num_classes, 'sampling_method':opt.sampling,
+                        'beta_constant':opt.beta_constant}
+        criterion    = WassersteinLoss(**loss_params)
+        to_optim    += [{'params':criterion.parameters(), 'lr':opt.beta_lr, 'weight_decay':0}]
     elif loss == 'watriplet':
         loss_params  = {'margin':opt.margin, 'sampling_method':opt.sampling}
-        criterion    = WaTripletLoss(**loss_params)
+        criterion    = WaTripletLoss(**loss_params)    
     else:
         raise Exception('Loss {} not available!'.format(loss))
     return criterion, to_optim
@@ -307,6 +313,76 @@ class MarginLoss(torch.nn.Module):
 
             pos_dist = ((train_triplet['Anchor']-train_triplet['Positive']).pow(2).sum()+1e-8).pow(1/2)
             neg_dist = ((train_triplet['Anchor']-train_triplet['Negative']).pow(2).sum()+1e-8).pow(1/2)
+
+            d_ap.append(pos_dist)
+            d_an.append(neg_dist)
+        d_ap, d_an = torch.stack(d_ap), torch.stack(d_an)
+
+        if self.beta_constant:
+            beta = self.beta
+        else:
+            beta = torch.stack([self.beta[labels[triplet[0]]] for triplet in sampled_triplets]).type(torch.cuda.FloatTensor)
+
+        pos_loss = torch.nn.functional.relu(d_ap-beta+self.margin)
+        neg_loss = torch.nn.functional.relu(beta-d_an+self.margin)
+
+        pair_count = torch.sum((pos_loss>0.)+(neg_loss>0.)).type(torch.cuda.FloatTensor)
+
+        if pair_count == 0.:
+            loss = torch.sum(pos_loss+neg_loss)
+        else:
+            loss = torch.sum(pos_loss+neg_loss)/pair_count
+
+        # if self.nu: loss = loss + beta_regularisation_loss.type(torch.cuda.FloatTensor)
+
+        return loss
+    
+"""================================================================================================="""
+### WassersteinLoss with trainable class separation margin beta. Runs on Mini-batches as well.
+class WassersteinLoss(torch.nn.Module):
+    def __init__(self, margin=0.2, nu=0, beta=1.2, n_classes=100, beta_constant=False, sampling_method='distance'):
+        """
+        Args:
+            margin:             Triplet Margin.
+            nu:                 Regularisation Parameter for beta values if they are learned.
+            beta:               Class-Margin values.
+            n_classes:          Number of different classes during training.
+        """
+        super(WassersteinLoss, self).__init__()
+        self.margin             = margin
+        self.n_classes          = n_classes
+        self.beta_constant     = beta_constant
+
+        self.beta_val = beta
+        self.beta = beta if beta_constant else torch.nn.Parameter(torch.ones(n_classes)*beta)
+
+        self.nu                 = nu
+
+        self.sampling_method    = sampling_method
+        self.sampler            = Sampler(method=sampling_method)
+
+
+    def forward(self, batch, labels, gt_labels=None):
+        """
+        Args:
+            batch:   torch.Tensor: Input of embeddings with size (BS x DIM)
+            labels: nparray/list: For each element of the batch assigns a class [0,...,C-1], shape: (BS x 1)
+        """
+        if isinstance(labels, torch.Tensor): labels = labels.detach().cpu().numpy()
+
+        if callable(self.sampler):
+            sampled_triplets = self.sampler(batch, labels, gt_labels)
+        else:
+            sampled_triplets = self.sampler.give(batch, labels, gt_labels)
+
+        d_ap, d_an = [],[]
+        for triplet in sampled_triplets:
+            train_triplet = {'Anchor': batch[triplet[0],:], 'Positive':batch[triplet[1],:], 'Negative':batch[triplet[2]]}
+             wloss = SamplesLoss(loss = "sinkhorn", p = 2, blur=0.05, scaling = .99, backend = "online")
+             d1 = wloss(train_triplet['Anchor'],train_triplet['Positive'])
+             d2 = wloss(train_triplet['Anchor'],train_triplet['Negative'])
+            pos_dist = (d1.pow(2).sum()+1e-8).pow(1/2)
+            neg_dist = (d2.pow(2).sum()+1e-8).pow(1/2)
 
             d_ap.append(pos_dist)
             d_an.append(neg_dist)
